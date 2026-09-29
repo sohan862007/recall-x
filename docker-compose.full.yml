@@ -1,0 +1,131 @@
+version: '3.8'
+
+# Full stack: Hindsight (memory) + RECALL-X (app)
+# Run from RECALL-X root with Hindsight cloned as sibling directory:
+#   git clone https://github.com/hindsight-ai/hindsight-ai ../hindsight-ai
+# Then: docker compose -f docker-compose.full.yml up --build
+
+services:
+  # Hindsight PostgreSQL
+  hindsight-db:
+    image: postgres:16-alpine
+    container_name: hindsight-db
+    environment:
+      - POSTGRES_USER=hindsight
+      - POSTGRES_PASSWORD=hindsight
+      - POSTGRES_DB=hindsight_db
+    volumes:
+      - hindsight_db_data:/var/lib/postgresql/data
+      - ../hindsight-ai/infra/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hindsight -d hindsight_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - recall-x-network
+
+  # Hindsight API Service
+  hindsight-api:
+    build:
+      context: ../hindsight-ai/apps/hindsight-service
+      dockerfile: Dockerfile
+    container_name: hindsight-api
+    environment:
+      - DATABASE_URL=postgresql://hindsight:hindsight@hindsight-db:5432/hindsight_db
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL_NAME=${LLM_MODEL_NAME:-gemini-2.5-flash}
+      - CONSOLIDATION_BATCH_SIZE=10
+      - FALLBACK_SIMILARITY_THRESHOLD=0.85
+    ports:
+      - "8000:8000"
+    depends_on:
+      hindsight-db:
+        condition: service_healthy
+    env_file:
+      - ../hindsight-ai/.env
+    restart: unless-stopped
+    networks:
+      - recall-x-network
+
+  # Hindsight Dashboard (optional - for memory inspection)
+  hindsight-dashboard:
+    build:
+      context: ../hindsight-ai/apps/hindsight-dashboard
+      dockerfile: Dockerfile
+    container_name: hindsight-dashboard
+    ports:
+      - "3001:3000"
+    environment:
+      - VITE_HINDSIGHT_SERVICE_API_URL=http://hindsight-api:8000
+    depends_on:
+      - hindsight-api
+    restart: unless-stopped
+    networks:
+      - recall-x-network
+
+  # RECALL-X Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: recall-x-backend
+    ports:
+      - "8001:8001"
+    environment:
+      - HINDSIGHT_API_URL=http://hindsight-api:8000
+      - HINDSIGHT_API_KEY=${HINDSIGHT_API_KEY:-}
+      - HINDSIGHT_BANK_ID=recall-x-experiments
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL_NAME=${LLM_MODEL_NAME:-gpt-4o-mini}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8001
+      - DEBUG=true
+      - FRONTEND_URL=http://localhost:3000
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - hindsight-api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - recall-x-network
+
+  # RECALL-X Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: recall-x-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8001/api
+    env_file:
+      - ./frontend/.env.local
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - recall-x-network
+
+volumes:
+  hindsight_db_data:
+
+networks:
+  recall-x-network:
+    driver: bridge

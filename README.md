@@ -97,13 +97,51 @@ This conditional knowledge is far more valuable than simple GOOD/BAD labels.
 
 ## Quick Start
 
-### Prerequisites
+### Option A: Docker Compose (Recommended — Full Stack)
 
+Runs Hindsight + RECALL-X backend + frontend in one command:
+
+```bash
+# 1. Clone RECALL-X
+git clone https://github.com/sohan862007/recall-x
+cd recall-x
+
+# 2. Configure environment
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
+# Edit backend/.env: add your LLM_API_KEY (OpenAI or compatible)
+
+# 3. Start everything (requires Docker & Docker Compose v2+)
+./start-fullstack.sh
+# Or on Windows: start-fullstack.bat
+```
+
+This starts:
+- **Hindsight DB** (PostgreSQL) → `localhost:5432`
+- **Hindsight API** → `localhost:8000`
+- **Hindsight Dashboard** → `localhost:3001`
+- **RECALL-X Backend** → `localhost:8001`
+- **RECALL-X Frontend** → `localhost:3000`
+
+Then seed demo data:
+```bash
+docker compose -f docker-compose.full.yml exec backend python seed/demo_experiments.py
+```
+
+Open **http://localhost:3000** and run the demo!
+
+---
+
+### Option B: Manual Development Setup
+
+For local development with hot reload:
+
+#### Prerequisites
 - Python 3.11+
 - Node.js 18+
-- Hindsight running (see below)
+- Docker (for Hindsight PostgreSQL)
 
-### 1. Start Hindsight
+#### 1. Start Hindsight (Memory Backend)
 
 ```bash
 # Clone and start Hindsight (provides memory backend)
@@ -116,7 +154,7 @@ cp .env.example .env
 # Hindsight runs on http://localhost:8000
 ```
 
-### 2. Configure RECALL-X Backend
+#### 2. Configure RECALL-X Backend
 
 ```bash
 cd recall-x/backend
@@ -124,10 +162,10 @@ cp .env.example .env
 # Edit .env with your settings:
 # HINDSIGHT_API_URL=http://localhost:8000
 # HINDSIGHT_BANK_ID=recall-x-experiments
-# LLM_API_KEY=your_openai_key (for reasoning)
+# LLM_API_KEY=your_openai_key  (for reasoning)
 ```
 
-### 3. Install & Run Backend
+#### 3. Install & Run Backend
 
 ```bash
 cd recall-x/backend
@@ -135,7 +173,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8001
 ```
 
-### 4. Install & Run Frontend
+#### 4. Install & Run Frontend
 
 ```bash
 cd recall-x/frontend
@@ -144,14 +182,14 @@ cp .env.example .env.local
 npm run dev
 ```
 
-### 5. Seed Demo Data
+#### 5. Seed Demo Data
 
 ```bash
 cd recall-x
 python seed/demo_experiments.py
 ```
 
-### 6. Open Application
+#### 6. Open Application
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8001
@@ -221,6 +259,10 @@ recall-x/
 │   └── demo_experiments.py        # 8 realistic demo experiments
 ├── docs/
 │   └── architecture.md            # Architecture documentation
+├── docker-compose.yml             # RECALL-X only (needs external Hindsight)
+├── docker-compose.full.yml        # Full stack (includes Hindsight)
+├── start-fullstack.sh             # Unix startup script
+├── start-fullstack.bat            # Windows startup script
 └── README.md
 ```
 
